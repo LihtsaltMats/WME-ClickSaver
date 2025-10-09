@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name            WME ClickSaver
 // @namespace       https://greasyfork.org/users/45389
-// @version         2025.07.11.001
+// @version         2025.10.08.001
 // @description     Various UI changes to make editing faster and easier.
 // @author          MapOMatic
 // @include         /^https:\/\/(www|beta)\.waze\.com\/(?!user\/)(.{2,6}\/)?editor\/?.*$/
@@ -13,6 +13,8 @@
 // @grant           GM_addElement
 // @require         https://greasyfork.org/scripts/24851-wazewrap/code/WazeWrap.js
 // @require         https://update.greasyfork.org/scripts/509664/WME%20Utils%20-%20Bootstrap.js
+// @downloadURL https://update.greasyfork.org/scripts/369629/WME%20ClickSaver.user.js
+// @updateURL https://update.greasyfork.org/scripts/369629/WME%20ClickSaver.meta.js
 // ==/UserScript==
 
 /* global I18n */
@@ -24,7 +26,7 @@
 (function main() {
     'use strict';
 
-    const updateMessage = 'Keep the address element contained in the selection view';
+    const updateMessage = 'v2.318-4-g276514d544 compatibility';
     const scriptName = GM_info.script.name;
     const scriptVersion = GM_info.script.version;
     const downloadUrl = 'https://greasyfork.org/scripts/369629-wme-clicksaver/code/WME%20ClickSaver.user.js';
@@ -522,12 +524,12 @@
 
                     $('.road-type-chip-select wz-checkable-chip').each(function updateRoadTypeChip() {
                         const style = {};
-                        if (this.getAttribute('checked') === 'false') {
-                            style.border = '';
-                            style.padding = '0px 4px';
-                        } else {
+                        if (this.checked) {
                             style.border = 'black 2px solid';
                             style.padding = '0px 3px';
+                        } else {
+                            style.border = '';
+                            style.padding = '0px 4px';
                         }
                         $(this.shadowRoot.querySelector('div')).css(style);
                     });
@@ -1319,12 +1321,12 @@
                     .map(roadType => roadTypeSettings[roadType])
                     .map(setting => setting.id)
                     .concat(selectedRoadTypes)
-                    .map(id => id.toString())
+                    .map(id => id)
             );
 
             // eslint-disable-next-line func-names
             $('wz-chip-select.road-type-chip-select wz-checkable-chip').each(function() {
-                const buttonValue = $(this).attr('value');
+                const buttonValue = this.value;
                 if (buttonValue === 'MIXED') {
                     return;
                 }
