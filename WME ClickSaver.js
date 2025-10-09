@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name            WME ClickSaver
 // @namespace       https://greasyfork.org/users/45389
-// @version         2025.10.08.001
+// @version         2025.10.09.001
 // @description     Various UI changes to make editing faster and easier.
 // @author          MapOMatic
 // @include         /^https:\/\/(www|beta)\.waze\.com\/(?!user\/)(.{2,6}\/)?editor\/?.*$/
@@ -13,8 +13,6 @@
 // @grant           GM_addElement
 // @require         https://greasyfork.org/scripts/24851-wazewrap/code/WazeWrap.js
 // @require         https://update.greasyfork.org/scripts/509664/WME%20Utils%20-%20Bootstrap.js
-// @downloadURL https://update.greasyfork.org/scripts/369629/WME%20ClickSaver.user.js
-// @updateURL https://update.greasyfork.org/scripts/369629/WME%20ClickSaver.meta.js
 // ==/UserScript==
 
 /* global I18n */
@@ -26,7 +24,7 @@
 (function main() {
     'use strict';
 
-    const updateMessage = 'v2.318-4-g276514d544 compatibility';
+    const updateMessage = 'Compatibility fixes, thank you fuji2086';
     const scriptName = GM_info.script.name;
     const scriptVersion = GM_info.script.version;
     const downloadUrl = 'https://greasyfork.org/scripts/369629-wme-clicksaver/code/WME%20ClickSaver.user.js';
