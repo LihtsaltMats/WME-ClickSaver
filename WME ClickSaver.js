@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name            WME ClickSaver
 // @namespace       https://greasyfork.org/users/45389
-// @version         2025.10.09.001
+// @version         2026.05.21.001
 // @description     Various UI changes to make editing faster and easier.
 // @author          MapOMatic
 // @include         /^https:\/\/(www|beta)\.waze\.com\/(?!user\/)(.{2,6}\/)?editor\/?.*$/
@@ -24,7 +24,7 @@
 (function main() {
     'use strict';
 
-    const updateMessage = 'Compatibility fixes, thank you fuji2086';
+    const updateMessage = 'Swapping the segment type from pedestrian to a drivable street or vice versa will now keep the house numbers';
     const scriptName = GM_info.script.name;
     const scriptVersion = GM_info.script.version;
     const downloadUrl = 'https://greasyfork.org/scripts/369629-wme-clicksaver/code/WME%20ClickSaver.user.js';
@@ -787,34 +787,39 @@
                 ?? sdk.DataModel.Cities.addCity({ cityName: '' });
         }
 
-        function addSwapPedestrianButton() { // Added displayMode argument to identify compact vs. regular mode.
-            const id = 'csSwapPedestrianContainer';
-            $(`#${id}`).remove();
-            const selection = sdk.Editing.getSelection();
-            if (selection?.ids.length === 1 && selection.objectType === 'segment') {
-                // TODO css
-                const $container = $('<div>', { id, style: 'white-space: nowrap;float: right;display: inline;' });
-                const $button = $('<div>', {
-                    id: 'csBtnSwapPedestrianRoadType',
-                    title: '',
-                    // TODO css
-                    style: 'display:inline-block;cursor:pointer;'
-                });
-                $button.append('<i class="w-icon w-icon-streetview w-icon-lg"></i><i class="fa fa-arrows-h fa-lg" style="color: #e84545;vertical-align: top;"></i><i class="w-icon w-icon-car w-icon-lg"></i>')
-                    .attr({
-                        title: trans.prefs.showSwapDrivingWalkingButton_Title
-                    });
-                $container.append($button);
+        function addSwapPedestrianButton() {
+            const CONTAINER_ID = 'csSwapPedestrianContainer';
+            $(`#${CONTAINER_ID}`).remove();
 
-                // Insert swap button in the correct location based on display mode.
-                const $label = $('#segment-edit-general > form > div > div.road-type-control > wz-label');
-                $label.css({ display: 'inline' }).append($container);
-
-                $('#csBtnSwapPedestrianRoadType').click(onSwapPedestrianButtonClick);
+            const selectedSegmentsIds = getSelectedSegments();
+            if (selectedSegmentsIds?.length !== 1) {
+                return;
             }
+
+            const BUTTON_ID = 'csBtnSwapPedestrianRoadType';
+
+            const $button = $('<div>', {
+                id: BUTTON_ID,
+                title: trans.prefs.showSwapDrivingWalkingButton_Title,
+                css: { display: 'inline-block', cursor: 'pointer' }
+            }).append(`
+                <i class="w-icon w-icon-streetview w-icon-lg"></i>
+                <i class="fa fa-arrows-h fa-lg" style="color: #e84545; vertical-align: top;"></i>
+                <i class="w-icon w-icon-car w-icon-lg"></i>
+            `)
+                .on('click', onSwapPedestrianButtonClick);
+
+            const $container = $('<div>', {
+                id: CONTAINER_ID,
+                css: { whiteSpace: 'nowrap', float: 'right', display: 'inline' }
+            }).append($button);
+
+            // Insert swap button in the correct location based on display mode.
+            const $label = $('#segment-edit-general > form > div > div.road-type-control > wz-label');
+            $label.css({ display: 'inline' }).append($container);
         }
 
-        function onSwapPedestrianButtonClick() {
+        async function onSwapPedestrianButtonClick() {
             if (_settings.warnOnPedestrianTypeSwap) {
                 _settings.warnOnPedestrianTypeSwap = false;
                 saveSettingsToStorage();
@@ -823,14 +828,28 @@
                 }
             }
 
-            const originalSegment = sdk.DataModel.Segments.getById({ segmentId: sdk.Editing.getSelection().ids[0] });
+            const selectedSegmentId = getSelectedSegments()[0];
+            if (!selectedSegmentId) {
+                return;
+            }
+
+            const originalSegment = sdk.DataModel.Segments.getById({ segmentId: selectedSegmentId });
+            if (!originalSegment) {
+                return;
+            }
+
+            // DataModel throws an error if the swapped segment is out of view
+            // Jump to the segment and wait for the map to properly load
+            sdk.Map.centerMapOnGeometry({ geometry: originalSegment.geometry });
+            await waitForMapDataLoad();
 
             // Copy the selected segment geometry and attributes, then delete it.
-            const oldPrimaryStreetId = originalSegment.primaryStreetId;
-            const oldAltStreetIds = originalSegment.alternateStreetIds;
+            const { geometry, primaryStreetId, alternateStreetIds, id: originalSegmentId } = originalSegment;
+            const houseNumbers = await sdk.DataModel.HouseNumbers.fetchHouseNumbers({ segmentIds: [originalSegmentId] });
 
             // WS.SDKMultiActionHack.groupActions(() => {
             const newRoadType = isPedestrianTypeSegment(originalSegment) ? wmeRoadType.STREET : wmeRoadType.WALKING_TRAIL;
+
             try {
                 sdk.DataModel.Segments.deleteSegment({ segmentId: originalSegment.id });
             } catch (ex) {
@@ -841,17 +860,47 @@
             }
 
             // create the replacement segment in the other segment type (pedestrian -> road & vice versa)
-
-            const newSegmentId = sdk.DataModel.Segments.addSegment({ geometry: originalSegment.geometry, roadType: newRoadType });
+            const newSegmentId = sdk.DataModel.Segments.addSegment({
+                geometry,
+                roadType: newRoadType
+            });
 
             sdk.DataModel.Segments.updateAddress({
                 segmentId: newSegmentId,
-                primaryStreetId: oldPrimaryStreetId,
-                alternateStreetIds: oldAltStreetIds
+                primaryStreetId,
+                alternateStreetIds
             });
+
+            for (const houseNumber of houseNumbers) {
+                sdk.DataModel.HouseNumbers.addHouseNumber({
+                    number: houseNumber.number,
+                    point: houseNumber.geometry,
+                    segmentId: newSegmentId
+                });
+            }
 
             sdk.Editing.setSelection({ selection: { ids: [newSegmentId], objectType: 'segment' } });
             // });
+        }
+
+        function waitForMapDataLoad() {
+            return new Promise(resolve => {
+                let timer;
+                const unbind = sdk.Events.on({
+                    eventName: 'wme-map-data-loaded',
+                    eventHandler: () => {
+                        clearTimeout(timer);
+                        timer = setTimeout(() => {
+                            unbind();
+                            resolve();
+                        }, 250);
+                    }
+                });
+                timer = setTimeout(() => {
+                    unbind();
+                    resolve();
+                }, 400);
+            });
         }
 
         function getSelectedSegments() {
